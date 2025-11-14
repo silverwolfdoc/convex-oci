@@ -2,8 +2,10 @@ services:
   postgres:
     image: postgres:18.1
     restart: unless-stopped
+    # Use a Docker-managed volume for pgdata to avoid host filesystem
+    # ownership/permission issues on macOS and other platforms.
     volumes:
-      - ./pgdata:/var/lib/postgresql
+      - pgdata:/var/lib/postgresql
     env_file: .env
     environment:
       - POSTGRES_USER=convex
@@ -97,5 +99,6 @@ services:
 
 volumes:
   data:
+  pgdata:
   caddy_data:
   caddy_config:

@@ -525,34 +525,40 @@ nslookup api.doctosaurus.com
 
 **Postgres 18+ mount error (data in /var/lib/postgresql/data):**
 
-If you see errors about `/var/lib/postgresql/data` being an unused mount, Postgres 18+ requires the mount to be at `/var/lib/postgresql` instead (manages version-specific subdirectories internally).
+If you see host permission errors like:
 
-**To migrate from old mount:**
+```
+mkdir: cannot create directory '/var/lib/postgresql': Permission denied
+```
+
+this often happens when bind-mounting a host directory (`./pgdata`) because the Postgres container's UID (usually `999`) doesn't match the host file ownership, particularly on macOS where `chown` inside containers doesn't affect host files.
+
+Solution (applied by this docker-compose configuration):
+
+- We now use a Docker-managed named volume `pgdata` mapped to `/var/lib/postgresql/data`. Docker volumes are managed by Docker and avoid host filesystem permission issues across platforms (Linux, macOS, Windows).
+
+Migration from an existing `./pgdata` host directory into the Docker volume (optional):
 
 ```bash
 # Stop containers
 docker compose down
 
-# Back up old data
-cp -r pgdata pgdata.backup
+# If you have important data, back it up first
+cp -r pgdata pgdata.backup || true
 
-# Remove old data directory
-rm -rf pgdata
+# Create a temporary container to copy data into the volume
+docker run --rm -v $(pwd)/pgdata:/from -v pgdata:/to alpine sh -c "cp -a /from/. /to/ || true"
 
-# Recreate empty pgdata directory
-mkdir pgdata
-
-# Start fresh (docker compose will initialize new database)
+# Start the stack (Docker will use the named volume)
 docker compose up -d
-
-# After backend is healthy, re-apply any data/functions you need
 ```
 
-If you have existing data in the old format and want to upgrade in-place:
+If you prefer to keep a host bind mount for `./pgdata`, ensure the directory is owned by UID `999` and has `0700` permissions (may require `sudo` on macOS):
 
 ```bash
-# This requires both Postgres versions to be available
-# See: https://github.com/docker-library/postgres/issues/37
+sudo chown 999:999 ./pgdata
+chmod 700 ./pgdata
+docker compose up -d
 ```
 
 ---
