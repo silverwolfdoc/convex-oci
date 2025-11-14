@@ -22,7 +22,7 @@ services:
     image: postgres:18.1
     restart: unless-stopped
     volumes:
-      - ./pgdata:/var/lib/postgresql/data
+      - ./pgdata:/var/lib/postgresql
     env_file: .env
     environment:
       - POSTGRES_USER=convex
@@ -504,6 +504,38 @@ docker compose logs caddy -f
 
 # Verify DNS resolves
 nslookup api.doctosaurus.com
+```
+
+**Postgres 18+ mount error (data in /var/lib/postgresql/data):**
+
+If you see errors about `/var/lib/postgresql/data` being an unused mount, Postgres 18+ requires the mount to be at `/var/lib/postgresql` instead (manages version-specific subdirectories internally).
+
+**To migrate from old mount:**
+
+```bash
+# Stop containers
+docker compose down
+
+# Back up old data
+cp -r pgdata pgdata.backup
+
+# Remove old data directory
+rm -rf pgdata
+
+# Recreate empty pgdata directory
+mkdir pgdata
+
+# Start fresh (docker compose will initialize new database)
+docker compose up -d
+
+# After backend is healthy, re-apply any data/functions you need
+```
+
+If you have existing data in the old format and want to upgrade in-place:
+
+```bash
+# This requires both Postgres versions to be available
+# See: https://github.com/docker-library/postgres/issues/37
 ```
 
 ---
