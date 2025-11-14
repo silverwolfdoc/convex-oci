@@ -287,7 +287,7 @@ INSTANCE_SECRET=your-generated-instance-secret-here
 # Database Configuration
 # Auto-generated based on POSTGRES_PASSWORD and local Postgres container
 # Only modify if using an external PostgreSQL database
-DATABASE_URL=postgresql://convex:your-encoded-password@postgres:5432
+POSTGRES_URL=postgres://convex:your-encoded-password@postgres:5432
 
 # Convex Backend Origin URLs
 # CONVEX_CLOUD_ORIGIN: where your backend API is accessible (typically port 3210)
@@ -550,7 +550,7 @@ The `.env` file contains all configuration. Here are the key variables:
 |----------|-------------|--------------|
 | `POSTGRES_PASSWORD` | Database password | `pre-docker.sh` (auto) |
 | `INSTANCE_SECRET` | Backend secret key | `pre-docker.sh` (auto) |
-| `DATABASE_URL` | PostgreSQL connection string | `pre-docker.sh` (auto) |
+| `POSTGRES_URL` | PostgreSQL connection string | `pre-docker.sh` (auto) |
 | `CONVEX_CLOUD_ORIGIN` | Public API URL | `pre-docker.sh` (from your input) |
 | `CONVEX_SITE_ORIGIN` | Public HTTP actions URL | `pre-docker.sh` (from your input) |
 | `NEXT_PUBLIC_DEPLOYMENT_URL` | Dashboard backend URL | `pre-docker.sh` (from your input) |

@@ -63,10 +63,10 @@ fi
 CLOUD_ORIGIN="https://$API_DOMAIN"
 SITE_ORIGIN="https://$SITE_DOMAIN"
 
-# 9. Generate DATABASE_URL from postgres container credentials
+# 9. Generate POSTGRES_URL from postgres container credentials
 # URL-encode the password (replace / with %2F and = with %3D)
 ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | sed 's/\//\%2F/g' | sed 's/=/\%3D/g')
-DATABASE_URL="postgresql://convex:$ENCODED_PASSWORD@postgres:5432"
+POSTGRES_URL="postgres://convex:$ENCODED_PASSWORD@postgres:5432"
 
 # 10. Create .env file with secrets
 cat > "$ENV_FILE" <<EOF
@@ -78,7 +78,7 @@ INSTANCE_SECRET=$INSTANCE_SECRET
 
 # Database Configuration
 # Auto-generated for the local Postgres container
-DATABASE_URL=$DATABASE_URL
+POSTGRES_URL=$POSTGRES_URL
 
 # Convex Backend Origin URLs
 CONVEX_CLOUD_ORIGIN=$CLOUD_ORIGIN
@@ -128,7 +128,7 @@ fi
 echo "PREP DONE."
 echo " - Generated POSTGRES_PASSWORD: (hidden, saved in .env)"
 echo " - Generated INSTANCE_SECRET: (hidden, saved in .env)"
-echo " - Saved DATABASE_URL: (hidden, saved in .env)"
+echo " - Saved POSTGRES_URL: (hidden, saved in .env)"
 echo " - Saved CONVEX_CLOUD_ORIGIN: $CLOUD_ORIGIN"
 echo " - Saved CONVEX_SITE_ORIGIN: $SITE_ORIGIN"
 echo " - Saved CLOUDFLARE_API_TOKEN: (hidden, saved in .env)"
