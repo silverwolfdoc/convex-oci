@@ -348,6 +348,8 @@ chmod +x set-admin-key.sh
 ```bash
 mkdir -p ~/convex-selfhost
 cd ~/convex-selfhost
+sudo apt install git
+git clone https://github.com/silverwolfdoc/convex-oci.git .
 # paste the four files here
 chmod +x pre-docker.sh set-admin-key.sh
 ```
