@@ -9,8 +9,6 @@ api.doctosaurus.com {
   reverse_proxy backend:3210 {
     header_up Host {host}
     header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
-    header_up X-Forwarded-Proto {scheme}
   }
 }
 
@@ -21,8 +19,6 @@ dashboard.doctosaurus.com {
   reverse_proxy dashboard:6791 {
     header_up Host {host}
     header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
-    header_up X-Forwarded-Proto {scheme}
   }
 }
 
@@ -33,7 +29,5 @@ site.doctosaurus.com {
   reverse_proxy backend:3211 {
     header_up Host {host}
     header_up X-Real-IP {remote}
-    header_up X-Forwarded-For {remote}
-    header_up X-Forwarded-Proto {scheme}
   }
 }
