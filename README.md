@@ -1,11 +1,14 @@
-You get four paste-ready files:
+# Convex Self-Hosted with Docker Compose
 
-- `docker-compose.yml` — full stack (Postgres 18, Convex backend, dashboard, Caddy). Placeholders are minimized; the pre-docker script will inject secrets and your Cloudflare token.
-- `Caddyfile` — same as before (Cloudflare DNS challenge).
-- `pre-docker.sh` — for Ubuntu 24.04: installs Docker, creates data dirs, generates `INSTANCE_SECRET` & `POSTGRES_PASSWORD`, prompts you to paste the Cloudflare API token and injects it into `docker-compose.yml`.
-- `set-admin-key.sh` — a small developer utility: given an admin key (or empty to auto-generate), it will inject the key into `docker-compose.yml`, restart the dashboard, and run simple health checks for Postgres, backend and dashboard so you get immediate feedback.
+Complete setup for self-hosting Convex backend and dashboard with Postgres, Caddy reverse proxy, and Cloudflare TLS.
 
-Drop the four files into one folder (e.g. `~/convex-selfhost`), `chmod +x` the scripts, run the pre script, then `docker compose up -d --pull`. After startup you can either generate the admin key and run the setter script, or pass the admin key straight to the setter script.
+You get five files:
+
+- `docker-compose.yml` — full stack (Postgres 18.1, Convex backend, dashboard, Caddy). Reads secrets from `.env`.
+- `Caddyfile` — Cloudflare DNS challenge for HTTPS.
+- `.env.example` — template for secrets.
+- `pre-docker.sh` — Ubuntu 24.04 setup: installs Docker, creates data dirs, generates secrets, creates `.env`.
+- `set-admin-key.sh` — generates and injects admin key into `.env`, restarts dashboard, runs health checks.
 
 ---
 
@@ -16,14 +19,15 @@ version: "3.8"
 
 services:
   postgres:
-    image: postgres:18
+    image: postgres:18.1
     restart: unless-stopped
     volumes:
       - ./pgdata:/var/lib/postgresql/data
+    env_file: .env
     environment:
       - POSTGRES_USER=convex
-      - POSTGRES_PASSWORD=REPLACE_WITH_POSTGRES_PASSWORD
-      - POSTGRES_DB=convex
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=convex_self_hosted
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U convex"]
       interval: 10s
@@ -37,9 +41,12 @@ services:
     ports:
       - "127.0.0.1:3210:3210"
       - "127.0.0.1:3211:3211"
+    env_file: .env
     environment:
-      - INSTANCE_SECRET=REPLACE_WITH_INSTANCE_SECRET
-      - DATABASE_URL=postgres://convex:REPLACE_WITH_POSTGRES_PASSWORD@postgres:5432/convex
+      - INSTANCE_NAME=convex-self-hosted
+      - INSTANCE_SECRET=${INSTANCE_SECRET}
+      - POSTGRES_URL=postgres://convex:${POSTGRES_PASSWORD}@postgres:5432
+      - DO_NOT_REQUIRE_SSL=1
     volumes:
       - ./convex-data:/convex/data
     depends_on:
@@ -52,21 +59,25 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:6791:6791"
+    env_file: .env
     environment:
       - NEXT_PUBLIC_DEPLOYMENT_URL=https://api.doctosaurus.com
-      - CONVEX_SELF_HOSTED_ADMIN_KEY=REPLACE_WITH_ADMIN_KEY
+      - CONVEX_BACKEND_URL=http://backend:3210
+      - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_SELF_HOSTED_ADMIN_KEY}
     depends_on:
       - backend
 
   caddy:
-    image: caddy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     restart: unless-stopped
     ports:
       - "80:80"
       - "443:443"
+    env_file: .env
     environment:
-      # will be replaced by pre-docker.sh when you paste the token
-      - CLOUDFLARE_API_TOKEN=REPLACE_WITH_CLOUDFLARE_API_TOKEN
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
@@ -77,25 +88,28 @@ volumes:
   caddy_config:
 ```
 
+**Key changes from old setup:**
+
+- `POSTGRES_URL` no longer includes `/convex_self_hosted` — database selection is via `INSTANCE_NAME`
+- All services use `env_file: .env` to load secrets
+- `INSTANCE_NAME=convex-self-hosted` explicitly set (creates DB `convex_self_hosted`)
+- `DO_NOT_REQUIRE_SSL=1` for local Postgres without SSL
+- `CONVEX_BACKEND_URL=http://backend:3210` added to dashboard for internal communication
+
 ---
 
 ## 2) `Caddyfile`
 
-```text
+```
 {
   email admin@doctosaurus.com
-  servers {
-    protocol {
-      allow_h2c
-    }
-  }
 }
 
 api.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:3210 {
+  reverse_proxy backend:3210 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -107,7 +121,7 @@ dashboard.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:6791 {
+  reverse_proxy dashboard:6791 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -119,7 +133,7 @@ site.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:3211 {
+  reverse_proxy backend:3211 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -130,16 +144,39 @@ site.doctosaurus.com {
 
 ---
 
-## 3) `pre-docker.sh` (Ubuntu 24.04 ready)
+## 3) `.env.example`
+
+```bash
+# Postgres Configuration
+# Generate a strong password with: openssl rand -base64 32
+POSTGRES_PASSWORD=your-secure-postgres-password-here
+
+# Convex Backend Configuration
+# Generate INSTANCE_SECRET with: openssl rand -hex 32
+INSTANCE_SECRET=your-generated-instance-secret-here
+
+# Convex Dashboard
+# Generate ADMIN_KEY by running (after backend is healthy):
+# docker compose exec backend ./generate_admin_key.sh
+CONVEX_SELF_HOSTED_ADMIN_KEY=your-generated-admin-key-here
+
+# Cloudflare Configuration (for TLS via DNS challenge)
+# Get your token from: https://dash.cloudflare.com/profile/api-tokens
+CLOUDFLARE_API_TOKEN=your-cloudflare-api-token-here
+```
+
+---
+
+## 4) `pre-docker.sh` — Ubuntu 24.04 setup
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-COMPOSE_FILE="$BASE_DIR/docker-compose.yml"
+ENV_FILE="$BASE_DIR/.env"
 
-echo "PRE-Docker setup (Ubuntu 24.04). Files: $COMPOSE_FILE"
+echo "PRE-Docker setup (Ubuntu 24.04). Creating .env file..."
 echo
 
 # 1. Update & prerequisites
@@ -170,13 +207,11 @@ mkdir -p "$BASE_DIR/convex-data" "$BASE_DIR/pgdata" "$BASE_DIR/caddy_data" "$BAS
 sudo chown -R "$USER":"$USER" "$BASE_DIR/convex-data" "$BASE_DIR/pgdata" "$BASE_DIR/caddy_data" "$BASE_DIR/caddy_config"
 chmod 700 "$BASE_DIR/convex-data" "$BASE_DIR/pgdata"
 
-# 6. Ensure compose file exists
-if [ ! -f "$COMPOSE_FILE" ]; then
-  echo "ERROR: $COMPOSE_FILE not found. Paste the provided docker-compose.yml into $BASE_DIR and run this script again."
-  exit 1
-fi
+# 6. Generate secrets
+POSTGRES_PASSWORD=$(openssl rand -base64 32)
+INSTANCE_SECRET=$(openssl rand -hex 32)
 
-# 7. Ask for Cloudflare token (we will inject it)
+# 7. Ask for Cloudflare token (will not be displayed)
 read -r -p $'Paste your Cloudflare API token (DNS:Edit for doctosaurus.com). It will not be displayed:\n' -s CF_TOKEN
 echo
 if [ -z "$CF_TOKEN" ]; then
@@ -184,23 +219,25 @@ if [ -z "$CF_TOKEN" ]; then
   exit 1
 fi
 
-# 8. Generate secrets
-INSTANCE_SECRET=$(openssl rand -hex 32)
-POSTGRES_PASSWORD=$(openssl rand -hex 16)
+# 8. Create .env file with secrets
+cat > "$ENV_FILE" <<EOF
+# Postgres Configuration
+POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 
-# 9. Backup compose and inject values
-cp -n "$COMPOSE_FILE" "$COMPOSE_FILE.bak" || true
-# Use sed -i (GNU sed expected on Ubuntu)
-sed -i "s/REPLACE_WITH_INSTANCE_SECRET/$INSTANCE_SECRET/g" "$COMPOSE_FILE"
-sed -i "s/REPLACE_WITH_POSTGRES_PASSWORD/$POSTGRES_PASSWORD/g" "$COMPOSE_FILE"
-# Escape any slashes in token for safe sed replacement
-escaped_token=$(printf '%s\n' "$CF_TOKEN" | sed -e 's/[\/&]/\\&/g')
-sed -i "s/REPLACE_WITH_CLOUDFLARE_API_TOKEN/$escaped_token/g" "$COMPOSE_FILE"
+# Convex Backend Configuration
+INSTANCE_SECRET=$INSTANCE_SECRET
 
-echo "Injected INSTANCE_SECRET, POSTGRES_PASSWORD, and Cloudflare token into docker-compose.yml."
+# Convex Dashboard (placeholder - will be filled after admin key generation)
+CONVEX_SELF_HOSTED_ADMIN_KEY=placeholder-until-generated
+
+# Cloudflare Configuration
+CLOUDFLARE_API_TOKEN=$CF_TOKEN
+EOF
+
+echo "Created $ENV_FILE with generated secrets."
 echo
 
-# 10. UFW (optional) - allow 22,80,443
+# 9. UFW (optional) - allow 22,80,443
 if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow 22/tcp
   sudo ufw allow 80/tcp
@@ -208,26 +245,27 @@ if command -v ufw >/dev/null 2>&1; then
   sudo ufw --force enable
 fi
 
-# 11. Show next steps
+# 10. Show next steps
 echo "PREP DONE."
-echo " - Generated INSTANCE_SECRET: $INSTANCE_SECRET"
-echo " - Generated POSTGRES_PASSWORD: (hidden)"
+echo " - Generated POSTGRES_PASSWORD: (hidden, saved in .env)"
+echo " - Generated INSTANCE_SECRET: (hidden, saved in .env)"
+echo " - Saved CLOUDFLARE_API_TOKEN: (hidden, saved in .env)"
 echo
 echo "Start stack now with:"
 echo "  cd $BASE_DIR"
-echo "  docker compose up -d --pull"
+echo "  docker compose up -d --pull always"
 echo
-echo "After containers are up, either:"
-echo " A) generate admin key inside backend:"
-echo "    docker compose exec backend ./generate_admin_key.sh"
-echo "    (copy printed key and run the set-admin-key.sh script below)"
+echo "After containers are healthy, generate and inject admin key:"
+echo "  ./set-admin-key.sh AUTO"
 echo
-echo " B) Or run set-admin-key.sh with an existing admin key to inject it and restart dashboard."
+echo "Or manually:"
+echo "  docker compose exec backend ./generate_admin_key.sh"
+echo "  ./set-admin-key.sh '<generated-key>'"
 echo
 echo "You can inspect logs with: docker compose logs -f"
 ```
 
-Make `pre-docker.sh` executable:
+Make executable:
 
 ```bash
 chmod +x pre-docker.sh
@@ -235,18 +273,18 @@ chmod +x pre-docker.sh
 
 ---
 
-## 4) `set-admin-key.sh` — inject admin key, restart dashboard, and run health checks
+## 5) `set-admin-key.sh` — generate and inject admin key
 
 ```bash
 #!/usr/bin/env bash
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-COMPOSE_FILE="$BASE_DIR/docker-compose.yml"
+ENV_FILE="$BASE_DIR/.env"
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <ADMIN_KEY|AUTO>"
-  echo "  ADMIN_KEY : your convex admin key string"
+  echo "  ADMIN_KEY : your convex admin key string (e.g., sk_live_...)"
   echo "  AUTO      : run backend generate_admin_key.sh and capture its output"
   exit 1
 fi
@@ -257,9 +295,9 @@ if [ "$KEY_ARG" = "AUTO" ]; then
   echo "Generating admin key by running the container helper..."
   # start backend if not running
   docker compose up -d backend
-  sleep 2
+  sleep 3
   # run the script and capture output
-  ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null | sed -n 's/.*\(sk_live[[:alnum:]]\{0,200\}\).*/\1/p')
+  ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null | grep -oP 'sk_live[a-zA-Z0-9_]{0,200}' | head -1 || true)
   # fall back to raw output if pattern didn't match
   if [ -z "$ADMIN_KEY" ]; then
     ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null || true)
@@ -269,26 +307,35 @@ if [ "$KEY_ARG" = "AUTO" ]; then
     echo "  docker compose exec backend ./generate_admin_key.sh"
     exit 1
   fi
-  echo "Captured admin key."
+  echo "Captured admin key: $ADMIN_KEY"
 else
   ADMIN_KEY="$KEY_ARG"
 fi
 
-# backup compose
-cp -n "$COMPOSE_FILE" "$COMPOSE_FILE.admin.bak" || true
-
-# replace existing placeholder or prior key (simple sed)
-escaped_key=$(printf '%s\n' "$ADMIN_KEY" | sed -e 's/[\/&]/\\&/g')
-if grep -q "REPLACE_WITH_ADMIN_KEY" "$COMPOSE_FILE"; then
-  sed -i "s/REPLACE_WITH_ADMIN_KEY/$escaped_key/g" "$COMPOSE_FILE"
-else
-  # attempt to replace any previous CONVEX_SELF_HOSTED_ADMIN_KEY line
-  sed -i "s/CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$escaped_key/g" "$COMPOSE_FILE" || true
+# Check if .env exists
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE not found. Run pre-docker.sh first."
+  exit 1
 fi
 
-echo "Injected admin key into docker-compose.yml (backed up to docker-compose.yml.admin.bak)."
+# Backup .env
+cp -n "$ENV_FILE" "$ENV_FILE.bak" || true
 
-# restart dashboard
+# Update or add CONVEX_SELF_HOSTED_ADMIN_KEY in .env
+if grep -q "^CONVEX_SELF_HOSTED_ADMIN_KEY=" "$ENV_FILE"; then
+  # Use platform-specific sed (macOS uses -i '', Linux uses -i)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/^CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY/" "$ENV_FILE"
+  else
+    sed -i "s/^CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY/" "$ENV_FILE"
+  fi
+else
+  echo "CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY" >> "$ENV_FILE"
+fi
+
+echo "Injected admin key into $ENV_FILE (backed up to $ENV_FILE.bak)."
+
+# restart dashboard to pick up new .env
 echo "Restarting dashboard service..."
 docker compose up -d dashboard
 
@@ -297,7 +344,7 @@ echo "Waiting for services to become ready..."
 for i in {1..30}; do
   s=$(docker inspect --format='{{json .State.Health.Status}}' $(docker compose ps -q postgres) 2>/dev/null || echo null)
   if echo "$s" | grep -q healthy; then
-    echo "Postgres healthy."
+    echo "✓ Postgres healthy."
     break
   fi
   echo -n "."
@@ -307,7 +354,7 @@ done
 # Wait for backend port to respond locally
 for i in {1..30}; do
   if curl -sS --connect-timeout 2 http://127.0.0.1:3210/ >/dev/null 2>&1; then
-    echo "Backend responding on 127.0.0.1:3210"
+    echo "✓ Backend responding on 127.0.0.1:3210"
     break
   fi
   echo -n "."
@@ -317,7 +364,7 @@ done
 # Check dashboard locally
 for i in {1..30}; do
   if curl -sS --connect-timeout 2 http://127.0.0.1:6791/ >/dev/null 2>&1; then
-    echo "Dashboard responding on 127.0.0.1:6791"
+    echo "✓ Dashboard responding on 127.0.0.1:6791"
     break
   fi
   echo -n "."
@@ -329,11 +376,14 @@ echo "Done. Quick status:"
 docker compose ps
 
 echo
-echo "If you want to revert the admin key injection, restore the backup:"
-echo "  cp $COMPOSE_FILE.admin.bak $COMPOSE_FILE && docker compose up -d dashboard"
+echo "Dashboard admin key is now set. Access dashboard at: http://127.0.0.1:6791"
+echo "Or via reverse proxy (if DNS configured): https://dashboard.doctosaurus.com"
+echo
+echo "If you want to revert, restore the backup:"
+echo "  cp $ENV_FILE.bak $ENV_FILE && docker compose restart dashboard"
 ```
 
-Make it executable:
+Make executable:
 
 ```bash
 chmod +x set-admin-key.sh
@@ -341,68 +391,133 @@ chmod +x set-admin-key.sh
 
 ---
 
-## Quick copy-paste workflow (what I recommend)
+## Quick Start
 
-1. SSH into VPS and create folder:
+1. **SSH into VPS and create folder:**
 
 ```bash
 mkdir -p ~/convex-selfhost
 cd ~/convex-selfhost
-sudo apt install git
 git clone https://github.com/silverwolfdoc/convex-oci.git .
-# paste the four files here
 chmod +x pre-docker.sh set-admin-key.sh
 ```
 
-2. Logout and then login . Run pre-docker script (it will prompt you to paste the Cloudflare API token quietly):
+2. **Run setup script (will prompt for Cloudflare token):**
 
 ```bash
 ./pre-docker.sh
 ```
 
-3. Start the stack:
+3. **Start the stack:**
 
 ```bash
-cd ~/convex-selfhost
 docker compose up -d --pull always
 ```
 
-4. (Option A) Auto-generate and inject the admin key:
+4. **Auto-generate and inject admin key:**
 
 ```bash
-# This runs generate_admin_key.sh inside the backend and injects the found key
 ./set-admin-key.sh AUTO
 ```
 
-5. (Option B) Manually generate then inject:
+5. **Verify services are healthy:**
 
 ```bash
-# generate and copy printed key
-docker compose exec backend ./generate_admin_key.sh
-
-# then inject and restart dashboard (paste the key in place of <KEY>)
-./set-admin-key.sh "<KEY>"
+docker compose ps
 ```
 
-6. Verify:
+6. **Access dashboard:**
 
-- Check `docker compose logs -f caddy` to see Caddy obtaining certs (it will use the CF token).
-- Ensure DNS A records point to your VPS IP for `api`, `dashboard`, `site` (you can toggle Cloudflare proxy later).
-- `./set-admin-key.sh` already runs local health checks for Postgres, backend, and dashboard.
-
-7. Add Cloudflare DNS A records:
-
-api.doctosaurus.com → your VPS IP
-
-dashboard.doctosaurus.com → your VPS IP
-
-site.doctosaurus.com → your VPS IP (optional)
+- Local: `http://127.0.0.1:6791`
+- Remote (after DNS): `https://dashboard.doctosaurus.com`
 
 ---
 
-## Notes & small tips
+## Configuration
 
-- `pre-docker.sh` injects your Cloudflare token directly in the compose file (no `.env`). If you prefer it not to be in the file, let me know and I’ll make the compose reference an external `.env` instead.
-- The `AUTO` mode of `set-admin-key.sh` attempts to capture the admin key printed by `generate_admin_key.sh`. If the script output format changes, fallback is to run generate manually and pass the key to the setter.
-- Backups: `./pgdata` and `./convex-data` are host folders — tar them for backups as needed.
-- If you prefer the admin key to be stored outside `docker-compose.yml` (safer), we can change the compose to read the key from a file (mounted secret) or from an `.env` so you don’t rewrite the compose each time.
+### DNS Records
+
+Add A records pointing to your VPS IP:
+
+- `api.doctosaurus.com` → your VPS IP
+- `dashboard.doctosaurus.com` → your VPS IP
+- `site.doctosaurus.com` → your VPS IP (optional, for HTTP actions)
+
+### Environment Variables (in `.env`)
+
+- **POSTGRES_PASSWORD** — Database password (generated by `pre-docker.sh`)
+- **INSTANCE_SECRET** — Backend secret key (generated by `pre-docker.sh`)
+- **INSTANCE_NAME** — Determines database name: `convex-self-hosted` → `convex_self_hosted`
+- **POSTGRES_URL** — Connection string (no database name, `DO_NOT_REQUIRE_SSL=1` for local Postgres)
+- **CONVEX_SELF_HOSTED_ADMIN_KEY** — Dashboard auth key (generated by `set-admin-key.sh`)
+- **CLOUDFLARE_API_TOKEN** — For Caddy TLS via DNS challenge
+
+### Database
+
+- Default: `convex_self_hosted` (matches instance name `convex-self-hosted` with `-` → `_`)
+- User: `convex`
+- Postgres 18.1 with health check enabled
+
+---
+
+## Troubleshooting
+
+**Backend fails to connect to Postgres:**
+
+```bash
+# Check backend logs
+docker compose logs backend
+
+# Verify POSTGRES_URL format (should NOT include database name)
+grep POSTGRES_URL .env
+# Should look like: postgres://convex:password@postgres:5432
+```
+
+**Admin key generation fails:**
+
+```bash
+# Try manually
+docker compose exec backend ./generate_admin_key.sh
+
+# Check backend logs
+docker compose logs backend -f
+```
+
+**Dashboard not accessible:**
+
+```bash
+# Verify admin key is set
+grep CONVEX_SELF_HOSTED_ADMIN_KEY .env
+
+# Restart dashboard
+docker compose restart dashboard
+
+# Check logs
+docker compose logs dashboard -f
+```
+
+**TLS cert not obtained:**
+
+```bash
+# Check Caddy logs
+docker compose logs caddy -f
+
+# Verify DNS resolves
+nslookup api.doctosaurus.com
+```
+
+---
+
+## Security Notes
+
+- **`.env` file** is git-ignored; never commit secrets
+- **Cloudflare token** should have DNS:Edit permissions only
+- **Backups:** Regularly backup `./pgdata`, `./convex-data`
+- **Postgres SSL:** `DO_NOT_REQUIRE_SSL=1` is for local development; remove for remote production databases
+
+---
+
+## Additional Resources
+
+- [Convex Self-Hosted README](https://github.com/get-convex/convex-backend/tree/main/self-hosted)
+- [Convex Stack Guide](https://stack.convex.dev/self-hosted-develop-and-deploy)

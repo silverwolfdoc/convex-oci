@@ -2,11 +2,11 @@
 set -euo pipefail
 
 BASE_DIR="$(cd "$(dirname "$0")" && pwd)"
-COMPOSE_FILE="$BASE_DIR/docker-compose.yml"
+ENV_FILE="$BASE_DIR/.env"
 
 if [ $# -lt 1 ]; then
   echo "Usage: $0 <ADMIN_KEY|AUTO>"
-  echo "  ADMIN_KEY : your convex admin key string"
+  echo "  ADMIN_KEY : your convex admin key string (e.g., sk_live_...)"
   echo "  AUTO      : run backend generate_admin_key.sh and capture its output"
   exit 1
 fi
@@ -17,9 +17,9 @@ if [ "$KEY_ARG" = "AUTO" ]; then
   echo "Generating admin key by running the container helper..."
   # start backend if not running
   docker compose up -d backend
-  sleep 2
+  sleep 3
   # run the script and capture output
-  ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null | sed -n 's/.*\(sk_live[[:alnum:]]\{0,200\}\).*/\1/p')
+  ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null | grep -oP 'sk_live[a-zA-Z0-9_]{0,200}' | head -1 || true)
   # fall back to raw output if pattern didn't match
   if [ -z "$ADMIN_KEY" ]; then
     ADMIN_KEY=$(docker compose exec backend ./generate_admin_key.sh 2>/dev/null || true)
@@ -29,26 +29,35 @@ if [ "$KEY_ARG" = "AUTO" ]; then
     echo "  docker compose exec backend ./generate_admin_key.sh"
     exit 1
   fi
-  echo "Captured admin key."
+  echo "Captured admin key: $ADMIN_KEY"
 else
   ADMIN_KEY="$KEY_ARG"
 fi
 
-# backup compose
-cp -n "$COMPOSE_FILE" "$COMPOSE_FILE.admin.bak" || true
-
-# replace existing placeholder or prior key (simple sed)
-escaped_key=$(printf '%s\n' "$ADMIN_KEY" | sed -e 's/[\/&]/\\&/g')
-if grep -q "REPLACE_WITH_ADMIN_KEY" "$COMPOSE_FILE"; then
-  sed -i "s/REPLACE_WITH_ADMIN_KEY/$escaped_key/g" "$COMPOSE_FILE"
-else
-  # attempt to replace any previous CONVEX_SELF_HOSTED_ADMIN_KEY line
-  sed -i "s/CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$escaped_key/g" "$COMPOSE_FILE" || true
+# Check if .env exists
+if [ ! -f "$ENV_FILE" ]; then
+  echo "ERROR: $ENV_FILE not found. Run pre-docker.sh first."
+  exit 1
 fi
 
-echo "Injected admin key into docker-compose.yml (backed up to docker-compose.yml.admin.bak)."
+# Backup .env
+cp -n "$ENV_FILE" "$ENV_FILE.bak" || true
 
-# restart dashboard
+# Update or add CONVEX_SELF_HOSTED_ADMIN_KEY in .env
+if grep -q "^CONVEX_SELF_HOSTED_ADMIN_KEY=" "$ENV_FILE"; then
+  # Use platform-specific sed (macOS uses -i '', Linux uses -i)
+  if [[ "$OSTYPE" == "darwin"* ]]; then
+    sed -i '' "s/^CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY/" "$ENV_FILE"
+  else
+    sed -i "s/^CONVEX_SELF_HOSTED_ADMIN_KEY=.*/CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY/" "$ENV_FILE"
+  fi
+else
+  echo "CONVEX_SELF_HOSTED_ADMIN_KEY=$ADMIN_KEY" >> "$ENV_FILE"
+fi
+
+echo "Injected admin key into $ENV_FILE (backed up to $ENV_FILE.bak)."
+
+# restart dashboard to pick up new .env
 echo "Restarting dashboard service..."
 docker compose up -d dashboard
 
@@ -57,7 +66,7 @@ echo "Waiting for services to become ready..."
 for i in {1..30}; do
   s=$(docker inspect --format='{{json .State.Health.Status}}' $(docker compose ps -q postgres) 2>/dev/null || echo null)
   if echo "$s" | grep -q healthy; then
-    echo "Postgres healthy."
+    echo "✓ Postgres healthy."
     break
   fi
   echo -n "."
@@ -67,7 +76,7 @@ done
 # Wait for backend port to respond locally
 for i in {1..30}; do
   if curl -sS --connect-timeout 2 http://127.0.0.1:3210/ >/dev/null 2>&1; then
-    echo "Backend responding on 127.0.0.1:3210"
+    echo "✓ Backend responding on 127.0.0.1:3210"
     break
   fi
   echo -n "."
@@ -77,7 +86,7 @@ done
 # Check dashboard locally
 for i in {1..30}; do
   if curl -sS --connect-timeout 2 http://127.0.0.1:6791/ >/dev/null 2>&1; then
-    echo "Dashboard responding on 127.0.0.1:6791"
+    echo "✓ Dashboard responding on 127.0.0.1:6791"
     break
   fi
   echo -n "."
@@ -89,5 +98,8 @@ echo "Done. Quick status:"
 docker compose ps
 
 echo
-echo "If you want to revert the admin key injection, restore the backup:"
-echo "  cp $COMPOSE_FILE.admin.bak $COMPOSE_FILE && docker compose up -d dashboard"
+echo "Dashboard admin key is now set. Access dashboard at: http://127.0.0.1:6791"
+echo "Or via reverse proxy (if DNS configured): https://dashboard.doctosaurus.com"
+echo
+echo "If you want to revert, restore the backup:"
+echo "  cp $ENV_FILE.bak $ENV_FILE && docker compose restart dashboard"

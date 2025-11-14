@@ -4,10 +4,11 @@ services:
     restart: unless-stopped
     volumes:
       - ./pgdata:/var/lib/postgresql/data
+    env_file: .env
     environment:
       - POSTGRES_USER=convex
-      - POSTGRES_PASSWORD=REPLACE_WITH_POSTGRES_PASSWORD
-      - POSTGRES_DB=convex
+      - POSTGRES_PASSWORD=${POSTGRES_PASSWORD}
+      - POSTGRES_DB=convex_self_hosted
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U convex"]
       interval: 10s
@@ -21,9 +22,11 @@ services:
     ports:
       - "127.0.0.1:3210:3210"
       - "127.0.0.1:3211:3211"
+    env_file: .env
     environment:
-      - INSTANCE_SECRET=REPLACE_WITH_INSTANCE_SECRET
-      - DATABASE_URL=postgres://convex:REPLACE_WITH_POSTGRES_PASSWORD@postgres:5432/convex?sslmode=disable
+      - INSTANCE_NAME=convex-self-hosted
+      - POSTGRES_URL=postgres://convex:${POSTGRES_PASSWORD}@postgres:5432
+      - DO_NOT_REQUIRE_SSL=1
     volumes:
       - ./convex-data:/convex/data
     depends_on:
@@ -36,9 +39,11 @@ services:
     restart: unless-stopped
     ports:
       - "127.0.0.1:6791:6791"
+    env_file: .env
     environment:
       - NEXT_PUBLIC_DEPLOYMENT_URL=https://api.doctosaurus.com
-      - CONVEX_SELF_HOSTED_ADMIN_KEY=REPLACE_WITH_ADMIN_KEY
+      - CONVEX_BACKEND_URL=http://backend:3210
+      - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_SELF_HOSTED_ADMIN_KEY}
     depends_on:
       - backend
 
@@ -50,9 +55,9 @@ services:
     ports:
       - "80:80"
       - "443:443"
+    env_file: .env
     environment:
-      # will be replaced by pre-docker.sh when you paste the token
-      - CLOUDFLARE_API_TOKEN=REPLACE_WITH_CLOUDFLARE_API_TOKEN
+      - CLOUDFLARE_API_TOKEN=${CLOUDFLARE_API_TOKEN}
     volumes:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
