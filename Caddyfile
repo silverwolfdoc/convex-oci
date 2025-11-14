@@ -1,17 +1,12 @@
 {
   email admin@doctosaurus.com
-  servers {
-    protocol {
-      allow_h2c
-    }
-  }
 }
 
 api.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:3210 {
+  reverse_proxy backend:3210 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -23,7 +18,7 @@ dashboard.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:6791 {
+  reverse_proxy dashboard:6791 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}
@@ -35,7 +30,7 @@ site.doctosaurus.com {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
-  reverse_proxy 127.0.0.1:3211 {
+  reverse_proxy backend:3211 {
     header_up Host {host}
     header_up X-Real-IP {remote}
     header_up X-Forwarded-For {remote}

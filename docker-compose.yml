@@ -1,5 +1,3 @@
-version: "3.8"
-
 services:
   postgres:
     image: postgres:18.1
@@ -25,7 +23,7 @@ services:
       - "127.0.0.1:3211:3211"
     environment:
       - INSTANCE_SECRET=REPLACE_WITH_INSTANCE_SECRET
-      - DATABASE_URL=postgres://convex:REPLACE_WITH_POSTGRES_PASSWORD@postgres:5432/convex
+      - DATABASE_URL=postgres://convex:REPLACE_WITH_POSTGRES_PASSWORD@postgres:5432/convex?sslmode=disable
     volumes:
       - ./convex-data:/convex/data
     depends_on:
@@ -45,7 +43,9 @@ services:
       - backend
 
   caddy:
-    image: caddy:latest
+    build:
+      context: .
+      dockerfile: Dockerfile.caddy
     restart: unless-stopped
     ports:
       - "80:80"

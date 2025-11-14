@@ -354,17 +354,17 @@ git clone https://github.com/silverwolfdoc/convex-oci.git .
 chmod +x pre-docker.sh set-admin-key.sh
 ```
 
-2. Run pre-docker script (it will prompt you to paste the Cloudflare API token quietly):
+2. Logout and then login . Run pre-docker script (it will prompt you to paste the Cloudflare API token quietly):
 
 ```bash
-sudo ./pre-docker.sh
+./pre-docker.sh
 ```
 
 3. Start the stack:
 
 ```bash
 cd ~/convex-selfhost
-docker compose up -d --pull
+docker compose up -d --pull always
 ```
 
 4. (Option A) Auto-generate and inject the admin key:
@@ -389,6 +389,14 @@ docker compose exec backend ./generate_admin_key.sh
 - Check `docker compose logs -f caddy` to see Caddy obtaining certs (it will use the CF token).
 - Ensure DNS A records point to your VPS IP for `api`, `dashboard`, `site` (you can toggle Cloudflare proxy later).
 - `./set-admin-key.sh` already runs local health checks for Postgres, backend, and dashboard.
+
+7. Add Cloudflare DNS A records:
+
+api.doctosaurus.com → your VPS IP
+
+dashboard.doctosaurus.com → your VPS IP
+
+site.doctosaurus.com → your VPS IP (optional)
 
 ---
 
