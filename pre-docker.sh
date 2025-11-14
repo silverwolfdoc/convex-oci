@@ -48,8 +48,20 @@ if [ -z "$CF_TOKEN" ]; then
 fi
 
 # 8. Ask for domain configuration
-read -r -p 'Enter your domain for CONVEX_CLOUD_ORIGIN (e.g., https://api.example.com): ' CLOUD_ORIGIN
-read -r -p 'Enter your domain for CONVEX_SITE_ORIGIN (e.g., https://site.example.com): ' SITE_ORIGIN
+read -r -p 'Enter your admin email for SSL certificates (e.g., admin@example.com): ' ADMIN_EMAIL
+read -r -p 'Enter your API subdomain (e.g., api.example.com): ' API_DOMAIN
+read -r -p 'Enter your dashboard subdomain (e.g., dashboard.example.com): ' DASHBOARD_DOMAIN
+read -r -p 'Enter your site subdomain (e.g., site.example.com): ' SITE_DOMAIN
+
+# Validate domains are not empty
+if [ -z "$ADMIN_EMAIL" ] || [ -z "$API_DOMAIN" ] || [ -z "$DASHBOARD_DOMAIN" ] || [ -z "$SITE_DOMAIN" ]; then
+  echo "ERROR: All domain fields are required. Please re-run the script."
+  exit 1
+fi
+
+# Construct origin URLs
+CLOUD_ORIGIN="https://$API_DOMAIN"
+SITE_ORIGIN="https://$SITE_DOMAIN"
 
 # 9. Generate DATABASE_URL from postgres container credentials
 # URL-encode the password (replace / with %2F and = with %3D)
@@ -85,6 +97,25 @@ EOF
 echo "Created $ENV_FILE with generated secrets."
 echo
 
+# 12. Generate Caddyfile from template
+CADDYFILE_TEMPLATE="$BASE_DIR/Caddyfile.template"
+CADDYFILE="$BASE_DIR/Caddyfile"
+
+if [ ! -f "$CADDYFILE_TEMPLATE" ]; then
+  echo "ERROR: Caddyfile.template not found. Cannot generate Caddyfile."
+  exit 1
+fi
+
+# Replace placeholders in template
+sed -e "s|{{ADMIN_EMAIL}}|$ADMIN_EMAIL|g" \
+    -e "s|{{API_DOMAIN}}|$API_DOMAIN|g" \
+    -e "s|{{DASHBOARD_DOMAIN}}|$DASHBOARD_DOMAIN|g" \
+    -e "s|{{SITE_DOMAIN}}|$SITE_DOMAIN|g" \
+    "$CADDYFILE_TEMPLATE" > "$CADDYFILE"
+
+echo "Generated $CADDYFILE with your domain configuration."
+echo
+
 # 11. UFW (optional) - allow 22,80,443
 if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow 22/tcp
@@ -101,6 +132,11 @@ echo " - Saved DATABASE_URL: (hidden, saved in .env)"
 echo " - Saved CONVEX_CLOUD_ORIGIN: $CLOUD_ORIGIN"
 echo " - Saved CONVEX_SITE_ORIGIN: $SITE_ORIGIN"
 echo " - Saved CLOUDFLARE_API_TOKEN: (hidden, saved in .env)"
+echo " - Generated Caddyfile with domains:"
+echo "   - API: $API_DOMAIN"
+echo "   - Dashboard: $DASHBOARD_DOMAIN"
+echo "   - Site: $SITE_DOMAIN"
+echo "   - Email: $ADMIN_EMAIL"
 echo
 echo "Start stack now with:"
 echo "  cd $BASE_DIR"

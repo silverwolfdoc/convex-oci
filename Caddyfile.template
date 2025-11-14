@@ -1,8 +1,8 @@
 {
-  email admin@doctosaurus.com
+  email {{ADMIN_EMAIL}}
 }
 
-api.doctosaurus.com {
+{{API_DOMAIN}} {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
@@ -12,7 +12,7 @@ api.doctosaurus.com {
   }
 }
 
-dashboard.doctosaurus.com {
+{{DASHBOARD_DOMAIN}} {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }
@@ -22,7 +22,7 @@ dashboard.doctosaurus.com {
   }
 }
 
-site.doctosaurus.com {
+{{SITE_DOMAIN}} {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}
   }

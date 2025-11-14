@@ -3,6 +3,9 @@
 .env.local
 .env*.local
 
+# Generated Caddyfile (contains user-specific domains)
+Caddyfile
+
 # Database and persistent data
 pgdata/
 convex-data/
