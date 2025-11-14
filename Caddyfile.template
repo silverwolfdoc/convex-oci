@@ -2,6 +2,14 @@
   email {{ADMIN_EMAIL}}
 }
 
+# Default configuration uses Let's Encrypt certificates via Cloudflare DNS challenge
+# If you hit rate limits or want long-term certificates (15 years), see:
+# CLOUDFLARE_ORIGIN_CERT_SETUP.md
+#
+# To use Cloudflare Origin Certificates, replace the "tls { dns cloudflare ... }" block
+# with: tls /etc/caddy/certs/cloudflare-origin.crt /etc/caddy/certs/cloudflare-origin.key
+# And ensure docker-compose.yml includes: - ./certs:/etc/caddy/certs:ro
+
 {{API_DOMAIN}} {
   tls {
     dns cloudflare {env.CLOUDFLARE_API_TOKEN}

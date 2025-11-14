@@ -96,6 +96,7 @@ services:
       - ./Caddyfile:/etc/caddy/Caddyfile:ro
       - ./caddy_data:/data
       - ./caddy_config:/config
+      - ./certs:/etc/caddy/certs:ro
 
 volumes:
   data:

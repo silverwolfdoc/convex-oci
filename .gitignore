@@ -12,6 +12,13 @@ convex-data/
 caddy_data/
 caddy_config/
 
+# SSL/TLS Certificates (contains sensitive private keys)
+certs/
+*.crt
+*.key
+*.pem
+*.cert
+
 # OS and Editor
 .DS_Store
 .vscode/
