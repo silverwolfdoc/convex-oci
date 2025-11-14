@@ -21,8 +21,8 @@ services:
     stop_grace_period: 10s
     stop_signal: SIGINT
     ports:
-      - "${PORT:-3210}:3210"
-      - "${SITE_PROXY_PORT:-3211}:3211"
+      - "3210:3210"
+      - "3211:3211"
     volumes:
       - data:/convex/data
     env_file: .env
@@ -35,17 +35,16 @@ services:
       - AWS_S3_FORCE_PATH_STYLE
       - AWS_SECRET_ACCESS_KEY
       - AWS_SESSION_TOKEN
-      - CONVEX_CLOUD_ORIGIN=${CONVEX_CLOUD_ORIGIN:-http://127.0.0.1:${PORT:-3210}}
+      - CONVEX_CLOUD_ORIGIN
       - CONVEX_RELEASE_VERSION_DEV
-      - CONVEX_SITE_ORIGIN=${CONVEX_SITE_ORIGIN:-http://127.0.0.1:${SITE_PROXY_PORT:-3211}}
+      - CONVEX_SITE_ORIGIN
       - DATABASE_URL
       - DISABLE_BEACON
       - DOCUMENT_RETENTION_DELAY=${DOCUMENT_RETENTION_DELAY:-172800}
-      - DO_NOT_REQUIRE_SSL
+      - DO_NOT_REQUIRE_SSL=1
       - INSTANCE_NAME=convex-self-hosted
       - INSTANCE_SECRET
       - MYSQL_URL
-      - POSTGRES_URL=postgres://convex:${POSTGRES_PASSWORD}@postgres:5432/convex_self_hosted
       - REDACT_LOGS_TO_CLIENT
       - RUST_BACKTRACE
       - RUST_LOG=${RUST_LOG:-info}
@@ -73,9 +72,9 @@ services:
       - "${DASHBOARD_PORT:-6791}:6791"
     env_file: .env
     environment:
-      - NEXT_PUBLIC_DEPLOYMENT_URL=${NEXT_PUBLIC_DEPLOYMENT_URL:-http://127.0.0.1:${PORT:-3210}}
+      - NEXT_PUBLIC_DEPLOYMENT_URL
       - CONVEX_BACKEND_URL=http://backend:3210
-      - CONVEX_SELF_HOSTED_ADMIN_KEY=${CONVEX_SELF_HOSTED_ADMIN_KEY}
+      - CONVEX_SELF_HOSTED_ADMIN_KEY
     depends_on:
       backend:
         condition: service_healthy

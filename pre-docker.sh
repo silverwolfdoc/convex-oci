@@ -47,13 +47,33 @@ if [ -z "$CF_TOKEN" ]; then
   exit 1
 fi
 
-# 8. Create .env file with secrets
+# 8. Ask for domain configuration
+read -r -p 'Enter your domain for CONVEX_CLOUD_ORIGIN (e.g., https://api.example.com): ' CLOUD_ORIGIN
+read -r -p 'Enter your domain for CONVEX_SITE_ORIGIN (e.g., https://site.example.com): ' SITE_ORIGIN
+
+# 9. Generate DATABASE_URL from postgres container credentials
+# URL-encode the password (replace / with %2F and = with %3D)
+ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | sed 's/\//\%2F/g' | sed 's/=/\%3D/g')
+DATABASE_URL="postgresql://convex:$ENCODED_PASSWORD@postgres:5432"
+
+# 10. Create .env file with secrets
 cat > "$ENV_FILE" <<EOF
 # Postgres Configuration
 POSTGRES_PASSWORD=$POSTGRES_PASSWORD
 
 # Convex Backend Configuration
 INSTANCE_SECRET=$INSTANCE_SECRET
+
+# Database Configuration
+# Auto-generated for the local Postgres container
+DATABASE_URL=$DATABASE_URL
+
+# Convex Backend Origin URLs
+CONVEX_CLOUD_ORIGIN=$CLOUD_ORIGIN
+CONVEX_SITE_ORIGIN=$SITE_ORIGIN
+
+# Convex Dashboard
+NEXT_PUBLIC_DEPLOYMENT_URL=$CLOUD_ORIGIN
 
 # Convex Dashboard (placeholder - will be filled after admin key generation)
 CONVEX_SELF_HOSTED_ADMIN_KEY=placeholder-until-generated
@@ -65,7 +85,7 @@ EOF
 echo "Created $ENV_FILE with generated secrets."
 echo
 
-# 9. UFW (optional) - allow 22,80,443
+# 11. UFW (optional) - allow 22,80,443
 if command -v ufw >/dev/null 2>&1; then
   sudo ufw allow 22/tcp
   sudo ufw allow 80/tcp
@@ -77,6 +97,9 @@ fi
 echo "PREP DONE."
 echo " - Generated POSTGRES_PASSWORD: (hidden, saved in .env)"
 echo " - Generated INSTANCE_SECRET: (hidden, saved in .env)"
+echo " - Saved DATABASE_URL: (hidden, saved in .env)"
+echo " - Saved CONVEX_CLOUD_ORIGIN: $CLOUD_ORIGIN"
+echo " - Saved CONVEX_SITE_ORIGIN: $SITE_ORIGIN"
 echo " - Saved CLOUDFLARE_API_TOKEN: (hidden, saved in .env)"
 echo
 echo "Start stack now with:"
