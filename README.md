@@ -284,6 +284,18 @@ rm -rf ./pgdata ./convex-data ./caddy_data ./caddy_config
 - Test local access: `curl http://127.0.0.1:6791`
 - Ensure backend is healthy and accessible
 
+### "The deployment URL or admin key is invalid" Error
+
+**Symptoms:** Dashboard login fails with "The deployment URL or admin key is invalid" error.
+
+**Solutions:**
+- **Check for whitespace**: Ensure there are no leading or trailing spaces in the admin key when copying/pasting
+- Verify deployment URL format: Use exactly `https://api.example.com` (no trailing slash, no path)
+- Verify admin key format: Should be `convex-self-hosted|...` (include the full key with prefix)
+- Regenerate admin key: `./set-admin-key.sh AUTO` (automatically trims whitespace)
+- Clear browser cache and try again
+- Check browser console (F12) for network errors when attempting login
+
 ### TLS Certificates Not Obtained
 
 **Symptoms:** Caddy fails to obtain SSL certificates, "rate limit" errors.
@@ -382,6 +394,7 @@ This project is licensed under the MIT License.
 - **Issues**: Open an issue on GitHub
 - **Convex Discord**: Join the [Convex community](https://convex.dev/community)
 - **Documentation**: Check the [official docs](https://docs.convex.dev/)
+- **Must read**: [github convex self host](https://github.com/get-convex/convex-backend/blob/main/self-hosted/README.md) and [blog post](https://stack.convex.dev/self-hosted-develop-and-deploy)
 
 ---
 

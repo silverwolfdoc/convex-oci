@@ -29,9 +29,12 @@ if [ "$KEY_ARG" = "AUTO" ]; then
     echo "  docker compose exec backend ./generate_admin_key.sh"
     exit 1
   fi
+  # Trim whitespace from admin key
+  ADMIN_KEY=$(echo "$ADMIN_KEY" | xargs)
   echo "Captured admin key: $ADMIN_KEY"
 else
-  ADMIN_KEY="$KEY_ARG"
+  # Trim whitespace from manually provided admin key
+  ADMIN_KEY=$(echo "$KEY_ARG" | xargs)
 fi
 
 # Check if .env exists
