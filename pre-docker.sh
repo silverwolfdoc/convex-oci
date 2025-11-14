@@ -40,7 +40,7 @@ POSTGRES_PASSWORD=$(openssl rand -base64 32)
 INSTANCE_SECRET=$(openssl rand -hex 32)
 
 # 7. Ask for Cloudflare token (will not be displayed)
-read -r -p $'Paste your Cloudflare API token (DNS:Edit for doctosaurus.com). It will not be displayed:\n' -s CF_TOKEN
+read -r -p $'Paste your Cloudflare API token (DNS:Edit for your domain). It will not be displayed:\n' -s CF_TOKEN
 echo
 if [ -z "$CF_TOKEN" ]; then
   echo "ERROR: Cloudflare token is empty. Re-run and paste token."
@@ -64,8 +64,8 @@ CLOUD_ORIGIN="https://$API_DOMAIN"
 SITE_ORIGIN="https://$SITE_DOMAIN"
 
 # 9. Generate POSTGRES_URL from postgres container credentials
-# URL-encode the password (replace / with %2F and = with %3D)
-ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | sed 's/\//\%2F/g' | sed 's/=/\%3D/g')
+# URL-encode the password properly (handles all special characters)
+ENCODED_PASSWORD=$(echo -n "$POSTGRES_PASSWORD" | python3 -c "import sys; from urllib.parse import quote; print(quote(sys.stdin.read().strip(), safe=''))")
 POSTGRES_URL="postgres://convex:$ENCODED_PASSWORD@postgres:5432"
 
 # 10. Create .env file with secrets
